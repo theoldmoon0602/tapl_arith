@@ -23,7 +23,55 @@ let rec term_to_string term =
   |TmPred (_, t) -> "pred(" ^ term_to_string t ^ ")"
   |TmIf (_, c, t, e) -> "if " ^ term_to_string c ^ " then " ^ term_to_string t ^ " else " ^ term_to_string e
 
+let rec isnumericval t =
+  match t with
+  |TmZero(_) -> true
+  |TmSucc(_,t1) -> isnumericval t1
+  |_ -> false
+
+let rec isval t =
+  match t with
+  |TmTrue(_) -> true
+  |TmFalse(_) -> true
+  |t when isnumericval t -> true
+  |_ -> false
+
+exception NoRuleApplies
+
+let rec eval1 t =
+  match t with
+  |TmIf(_, TmTrue(_), ifthen, _) -> ifthen
+  |TmIf(_, TmFalse(_), _, ifelse) -> ifelse
+  |TmIf(p, cond, ifthen, ifelse) ->
+      let cond' = eval1 cond in
+      TmIf(p, cond', ifthen, ifelse)
+  |TmSucc(p, t1) ->
+      let t1' = eval1 t1 in
+      TmSucc(p, t1')
+  |TmPred(p, TmZero(_)) ->
+      TmZero(p)
+  |TmPred(p, TmSucc(_, nv1)) when isnumericval nv1 ->
+      nv1
+  |TmPred(p, t1) ->
+      let t1' = eval1 t1 in
+      TmPred(p, t1')
+  |TmIsZero(p, TmZero(_)) ->
+      TmTrue(p)
+  |TmIsZero(p, TmSucc(_, nv1)) when isnumericval nv1 ->
+      TmFalse(p)
+  |TmIsZero(p, t1) ->
+      let t1' = eval1 t1 in
+      TmIsZero(p, t1')
+  |_ -> raise NoRuleApplies
+
+let rec eval t =
+  try
+    let t' = eval1 t in
+    eval t'
+  with NoRuleApplies -> t
+
 
 let () =
   let t = Parser.toplevel Lexer.main (Lexing.from_channel stdin) in
-  print_string (term_to_string t) |> ignore
+  let r = eval t in
+  print_string (term_to_string r) |> ignore
